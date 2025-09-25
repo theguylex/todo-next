@@ -4,7 +4,7 @@ This is a Next.js-based todo application built with TypeScript, featuring CRUD o
 
 ## Table of Contents
 
-Features
+Features <br>
 Prerequisites
 Installation
 Usage
