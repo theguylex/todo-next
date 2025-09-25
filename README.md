@@ -5,15 +5,15 @@ This is a Next.js-based todo application built with TypeScript, featuring CRUD o
 ## Table of Contents
 
 Features <br>
-Prerequisites
-Installation
-Usage
-API Endpoints
-Local Development
-Deployment
-Troubleshooting
-Contributing
-License
+Prerequisites <br>
+Installation <br>
+Usage <br>
+API Endpoints <br>
+Local Development <br>
+Deployment <br>
+Troubleshooting <br>
+Contributing <br>
+License <br>
 
 ## Features
 
