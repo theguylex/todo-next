@@ -1,6 +1,7 @@
 # Next.js Todo Application
 
 This is a Next.js-based todo application built with TypeScript, featuring CRUD operations (Create, Read, Update, Delete), pagination, filtering, and local storage using IndexedDB (via Dexie). It serves as a modern evolution of the TODOALT2 TypeScript todo project, integrating server-side API routes and client-side rendering.
+<img src="/public/assets/Screenshot 2025-09-27 at 12-25-18 .png" alt="" />
 
 ## Table of Contents
 
