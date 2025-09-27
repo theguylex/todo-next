@@ -71,6 +71,19 @@ body {
   font-weight: bold;
 }
 
+.status-indicator {
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.status-online {
+  color: green;
+}
+
+.status-offline {
+  color: red;
+}
+
 .pagination {
   margin-top: 1rem;
   display: flex;

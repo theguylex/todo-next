@@ -11,15 +11,23 @@ export interface DeletedTodo {
   id: number;
 }
 
+export interface SyncQueue {
+  id?: number;
+  action: 'add' | 'update' | 'delete';
+  data: TodoItem | number; // TodoItem for add/update, number (id) for delete
+}
+
 class TodoDatabase extends Dexie {
   todos!: Table<TodoItem, number>;
   deletedTodos!: Table<DeletedTodo, number>;
+  syncQueue!: Table<SyncQueue, number>;
 
   constructor() {
     super('TodoDatabase');
     this.version(1).stores({
       todos: '++id, title, completed, userId',
-      deletedTodos: 'id'
+      deletedTodos: 'id',
+      syncQueue: '++id, action'
     });
   }
 }

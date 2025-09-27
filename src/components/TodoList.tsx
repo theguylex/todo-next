@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { db, TodoItem } from '../db/todoDB';
 import TodoForm from './TodoForm';
 import Link from 'next/link';
@@ -12,40 +12,64 @@ export default function TodoList() {
   const [filter, setFilter] = useState<'all' | 'completed' | 'uncompleted'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  const loadTodos = async () => {
+    try {
+      const localTodos = await db.todos.toArray();
+      setTodos(localTodos.sort((a, b) => b.id - a.id));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      console.error('Load error:', err);
+    }
+  };
+
+  const syncQueue = useCallback(async () => {
+    if (!isOnline) return;
+
+    try {
+      const queue = await db.syncQueue.toArray();
+      for (const item of queue) {
+        switch (item.action) {
+          case 'add':
+            await db.todos.put(item.data as TodoItem); // Simulate API success
+            console.log('Synced add:', item.data);
+            break;
+          case 'update':
+            await db.todos.put(item.data as TodoItem); // Simulate API success
+            console.log('Synced update:', item.data);
+            break;
+          case 'delete':
+            await db.todos.delete(item.data as number); // Simulate API success
+            console.log('Synced delete:', item.data);
+            break;
+        }
+        await db.syncQueue.delete(item.id!);
+      }
+      loadTodos(); // Refresh todos after sync
+    } catch (err) {
+      console.error('Sync error:', err);
+      setError('Sync failed, some changes may be pending');
+    }
+  }, [isOnline]);
 
   useEffect(() => {
-    const loadTodos = async () => {
-      try {
-        const localTodos = await db.todos.toArray();
-        const response = await fetch('/api/todos');
-        if (!response.ok) {
-          if (response.status === 500) {
-            console.warn('API failed, falling back to local todos');
-            setTodos(localTodos);
-            return;
-          }
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const apiTodos = await response.json();
-        if (!Array.isArray(apiTodos)) throw new Error('Invalid API response');
-        const mergedTodos = [...apiTodos, ...localTodos]
-          .reduce((acc, todo) => {
-            const existing = acc.find((t: TodoItem) => t.id === todo.id);
-            return existing ? acc : [...acc, todo];
-          }, [] as TodoItem[])
-          .sort((a: TodoItem, b: TodoItem) => b.id - a.id);
-        setTodos(mergedTodos);
-        setError(null);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        console.error('Load error:', errorMessage);
-        setError(errorMessage);
-        const localTodos = await db.todos.toArray();
-        setTodos(localTodos);
-      }
-    };
     loadTodos();
-  }, []);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncQueue]);
 
   const filteredTodos = todos.filter(todo => {
     const matchesSearch = todo.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -60,16 +84,25 @@ export default function TodoList() {
 
   const addTodoHandler = async (todo: TodoItem) => {
     const id = await db.todos.add(todo);
-    setTodos([{ ...todo, id }, ...todos].sort((a: TodoItem, b: TodoItem) => b.id - a.id));
+    setTodos([{ ...todo, id }, ...todos].sort((a, b) => b.id - a.id));
+    if (!isOnline) {
+      await db.syncQueue.add({ action: 'add', data: { ...todo, id } });
+      console.log('Queued add:', { ...todo, id });
+    }
+    setPage(1);
   };
 
   const updateTodoHandler = async (todo: TodoItem) => {
     await db.todos.put(todo);
-    setTodos(todos.map((t: TodoItem) => t.id === todo.id ? todo : t).sort((a: TodoItem, b: TodoItem) => b.id - a.id));
+    setTodos(todos.map((t) => (t.id === todo.id ? todo : t)).sort((a, b) => b.id - a.id));
+    if (!isOnline) {
+      await db.syncQueue.add({ action: 'update', data: todo });
+      console.log('Queued update:', todo);
+    }
     setEditingTodo(null);
   };
 
-  if (error) return <p className="error-text">Error: {error}</p>; // Removed debug string
+  if (error) return <p className="error-text">Error: {error}</p>;
   if (!todos.length) return <p className="loading-text">Loading...</p>;
 
   return (
@@ -81,42 +114,91 @@ export default function TodoList() {
             type="text"
             placeholder="Search todos..."
             value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
             className="search-bar"
           />
           <fieldset className="filter-buttons">
-            <label><input type="radio" name="filter" checked={filter === 'all'} onChange={() => { setFilter('all'); setPage(1); }} /> All</label>
-            <label><input type="radio" name="filter" checked={filter === 'completed'} onChange={() => { setFilter('completed'); setPage(1); }} /> Completed</label>
-            <label><input type="radio" name="filter" checked={filter === 'uncompleted'} onChange={() => { setFilter('uncompleted'); setPage(1); }} /> Uncompleted</label>
+            <label>
+              <input
+                type="radio"
+                name="filter"
+                checked={filter === 'all'}
+                onChange={() => {
+                  setFilter('all');
+                  setPage(1);
+                }}
+              />{' '}
+              All
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="filter"
+                checked={filter === 'completed'}
+                onChange={() => {
+                  setFilter('completed');
+                  setPage(1);
+                }}
+              />{' '}
+              Completed
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="filter"
+                checked={filter === 'uncompleted'}
+                onChange={() => {
+                  setFilter('uncompleted');
+                  setPage(1);
+                }}
+              />{' '}
+              Uncompleted
+            </label>
           </fieldset>
         </div>
         <TodoForm onSubmit={addTodoHandler} />
       </div>
+      <div className={`status-indicator ${isOnline ? 'status-online' : 'status-offline'}`}>
+        Status: {isOnline ? 'Online' : 'Offline'}
+      </div>
       {editingTodo && (
         <div className="modal-overlay" onClick={() => setEditingTodo(null)}>
-          <div className="edit-modal" onClick={e => e.stopPropagation()}>
+          <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
             <h2>Edit Todo</h2>
             <TodoForm initialTodo={editingTodo} onSubmit={updateTodoHandler} />
-            <button className="modalCancelBtn" onClick={() => setEditingTodo(null)}>Cancel</button>
+            <button className="modalCancelBtn" onClick={() => setEditingTodo(null)}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
       <ul className="todo-list">
-        {currentTodos.map(todo => (
+        {currentTodos.map((todo) => (
           <li key={todo.id} className="todo-item">
             <span className="todo-title-text">{todo.title}</span>
-            <Link href={`/todos/${todo.id}`} className="view-link">View Details</Link>
+            <Link href={`/todos/${todo.id}`} className="view-link">
+              View Details
+            </Link>
             <span className={`todo-status ${todo.completed ? 'completed' : 'incomplete'}`}>
               {todo.completed ? '✅' : '❌'}
             </span>
-            <button className="edit-button" onClick={() => setEditingTodo(todo)}>Edit</button>
+            <button className="edit-button" onClick={() => setEditingTodo(todo)}>
+              Edit
+            </button>
           </li>
         ))}
       </ul>
       <div className="pagination">
-        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Prev</button>
+        <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+          Prev
+        </button>
         <span>Page {page}</span>
-        <button onClick={() => setPage(p => p + 1)} disabled={start + ITEMS_PER_PAGE >= filteredTodos.length}>Next</button>
+        <button onClick={() => setPage((p) => p + 1)} disabled={start + ITEMS_PER_PAGE >= filteredTodos.length}>
+          Next
+        </button>
       </div>
     </div>
   );
