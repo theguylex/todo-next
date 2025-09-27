@@ -14,7 +14,7 @@ export interface DeletedTodo {
 export interface SyncQueue {
   id?: number;
   action: 'add' | 'update' | 'delete';
-  data: TodoItem | number; // TodoItem for add/update, number (id) for delete
+  data: TodoItem | number;
 }
 
 class TodoDatabase extends Dexie {

@@ -33,21 +33,21 @@ export default function TodoList() {
       for (const item of queue) {
         switch (item.action) {
           case 'add':
-            await db.todos.put(item.data as TodoItem); // Simulate API success
+            await db.todos.put(item.data as TodoItem);
             console.log('Synced add:', item.data);
             break;
           case 'update':
-            await db.todos.put(item.data as TodoItem); // Simulate API success
+            await db.todos.put(item.data as TodoItem);
             console.log('Synced update:', item.data);
             break;
           case 'delete':
-            await db.todos.delete(item.data as number); // Simulate API success
+            await db.todos.delete(item.data as number);
             console.log('Synced delete:', item.data);
             break;
         }
         await db.syncQueue.delete(item.id!);
       }
-      loadTodos(); // Refresh todos after sync
+      loadTodos();
     } catch (err) {
       console.error('Sync error:', err);
       setError('Sync failed, some changes may be pending');
