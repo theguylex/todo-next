@@ -1,5 +1,18 @@
 import { NextResponse } from 'next/server';
-import axios from 'axios';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+
+const fetchWithRetry = async (url: string, options: AxiosRequestConfig = {}, retries = 3): Promise<AxiosResponse> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await axios.get(url, { ...options, timeout: 15000 });
+      return response;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+  throw new Error('Max retries reached'); // Ensure return type is satisfied
+};
 
 export async function GET(request: Request) {
   try {
@@ -9,7 +22,7 @@ export async function GET(request: Request) {
     console.log('Requested ID:', id);
 
     if (!id) {
-      const response = await axios.get('https://jsonplaceholder.typicode.com/todos', { timeout: 10000 });
+      const response = await fetchWithRetry('https://jsonplaceholder.typicode.com/todos', {});
       if (!response.data || !Array.isArray(response.data)) throw new Error('Invalid API response data');
       const apiTodos = response.data.slice(0, 20);
       console.log('API response (list):', apiTodos);
@@ -19,7 +32,7 @@ export async function GET(request: Request) {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return NextResponse.json({ error: 'Invalid ID format' }, { status: 400 });
 
-    const response = await axios.get(`https://jsonplaceholder.typicode.com/todos/${numId}`, { timeout: 10000 });
+    const response = await fetchWithRetry(`https://jsonplaceholder.typicode.com/todos/${numId}`, {});
     console.log('API response status:', response.status);
     console.log('API response data:', response.data);
 
@@ -28,7 +41,7 @@ export async function GET(request: Request) {
       return NextResponse.json(response.data);
     }
     if (response.status === 404) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
-    if (response.status >= 500) throw new Error(`Server error from API: ${response.status}`);
+    throw new Error(`Server error from API: ${response.status}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     console.error('API error:', errorMessage);

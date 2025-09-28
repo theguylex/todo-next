@@ -13,15 +13,27 @@ export default function TodoList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadTodos = async () => {
     try {
       const localTodos = await db.todos.toArray();
-      setTodos(localTodos.sort((a, b) => b.id - a.id));
+      if (localTodos.length === 0) {
+        // Fetch from JSONPlaceholder if empty
+        const response = await fetch('/api/todos');
+        if (!response.ok) throw new Error('Failed to fetch initial todos');
+        const apiTodos: TodoItem[] = await response.json(); // Explicitly type apiTodos
+        await db.todos.bulkAdd(apiTodos);
+        setTodos(apiTodos.sort((a: TodoItem, b: TodoItem) => b.id - a.id)); // Type sort parameters
+      } else {
+        setTodos(localTodos.sort((a: TodoItem, b: TodoItem) => b.id - a.id)); // Type sort parameters
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       console.error('Load error:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -55,6 +67,8 @@ export default function TodoList() {
   }, [isOnline]);
 
   useEffect(() => {
+    console.log('Initializing Dexie DB');
+    db.open().catch(err => console.error('Dexie open error:', err));
     loadTodos();
 
     const handleOnline = () => {
@@ -84,7 +98,7 @@ export default function TodoList() {
 
   const addTodoHandler = async (todo: TodoItem) => {
     const id = await db.todos.add(todo);
-    setTodos([{ ...todo, id }, ...todos].sort((a, b) => b.id - a.id));
+    setTodos([{ ...todo, id }, ...todos].sort((a: TodoItem, b: TodoItem) => b.id - a.id)); // Type sort parameters
     if (!isOnline) {
       await db.syncQueue.add({ action: 'add', data: { ...todo, id } });
       console.log('Queued add:', { ...todo, id });
@@ -94,7 +108,7 @@ export default function TodoList() {
 
   const updateTodoHandler = async (todo: TodoItem) => {
     await db.todos.put(todo);
-    setTodos(todos.map((t) => (t.id === todo.id ? todo : t)).sort((a, b) => b.id - a.id));
+    setTodos(todos.map((t) => (t.id === todo.id ? todo : t)).sort((a: TodoItem, b: TodoItem) => b.id - a.id)); // Type sort parameters
     if (!isOnline) {
       await db.syncQueue.add({ action: 'update', data: todo });
       console.log('Queued update:', todo);
@@ -103,7 +117,8 @@ export default function TodoList() {
   };
 
   if (error) return <p className="error-text">Error: {error}</p>;
-  if (!todos.length) return <p className="loading-text">Loading...</p>;
+  if (isLoading) return <p className="loading-text">Loading...</p>;
+  if (!todos.length) return <p className="no-todos">No todos yet. Add one!</p>;
 
   return (
     <div className="todo-container">
